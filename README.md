@@ -1,7 +1,6 @@
 # Sharpness-Aware Data Generation for Zero-shot Quantization (ICML 2024)
 This repository provides the PyTorch implementation of our ICML 2024 paper ["Sharpness-Aware Data Generation for Zero-shot Quantization"](https://arxiv.org/abs/2212.04780).
 
-![](./pipeline.png)
 
 ## Getting Started
 ### Installation
