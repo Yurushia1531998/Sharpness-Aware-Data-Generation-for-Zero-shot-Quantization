@@ -1,3 +1,7 @@
 fire
 torch
 torchvision
+Cvxpy
+tqdm
+shutil
+pynvml

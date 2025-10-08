@@ -78,6 +78,7 @@ class WeightQuantizer(nn.Module):
             weight, n_bits=self.n_bits, symmetric=False, channel_wise=True, signed=True)
         self.scale = nn.Parameter(self.scale)
         self.x_floor = (weight.detach() / self.scale).floor().detach()
+        #print("self.x_floor is ",self.x_floor.is_cuda)
 
         # initialize sigmoid
         self.sigmoid = RectifiedSigmoid(-0.1, 1.1)
@@ -86,11 +87,63 @@ class WeightQuantizer(nn.Module):
 
         # rounding mode selection (default: hard-rounding)
         self.train_mode = False
+        self.sam_meta_weight=None
+        self.meta_mode = False
 
     def forward(self):
-        x_int = self.x_floor + (self.soft_target() if self.train_mode else (self.bit_logit >= 0).float())
-        x_quant = torch.clamp(x_int + self.zero_point, 0, 2**self.n_bits - 1)
-        x_deq = (x_quant-self.zero_point) * self.scale
+        '''
+        print("Calling weight quantizer")
+        print("x_floor ")
+        print(self.x_floor)
+        print("scale ")
+        print(self.scale)
+        print("zero_point ")
+        print(self.zero_point)
+        print("self.soft_target()")
+        print(self.soft_target())
+        print("n_bits ",self.n_bits)
+        print("x_int ")
+        print(x_int)
+        print("int_mapping")
+        print(int_mapping)
+        print("x_quant")
+        print(x_quant)
+        print("self.mask_clamp ")
+        print(self.mask_clamp)
+        print("self.derivative_scale ")
+        print(self.derivative_scale)
+        print("x_deq")
+        print(x_deq)
+
+        Returns:
+
+        '''
+        if self.train_mode:
+            x_int = self.x_floor + self.soft_target()
+        elif self.meta_mode:
+            x_int = self.x_floor + round_ste(self.soft_target())
+            if self.sam_meta_weight is not None:
+                x_int += self.sam_meta_weight
+        else:
+            #print('Checking input before ', self.x_floor.get_device(), self.bit_logit.get_device())
+            x_int = self.x_floor + (self.bit_logit >= 0).float()
+            #print('Checking input ',self.x_floor.get_device() ,self.bit_logit.get_device())
+
+        int_mapping = x_int + self.zero_point
+
+
+
+        x_quant = torch.clamp(int_mapping, 0, 2**self.n_bits - 1)
+
+
+
+        self.mask_clamp= (int_mapping.ge(0) * int_mapping.le(2**self.n_bits - 1))
+
+        self.derivative_scale =(x_quant-self.zero_point)
+
+
+        x_deq = self.derivative_scale * self.scale
+
         return x_deq
 
     def extra_repr(self) -> str:
@@ -119,6 +172,7 @@ class ActivationQuantizer(nn.Module):
         self.signed = None
         self.train_mode = False
 
+
     def forward(self, x):
         if not self.initialized:
             self.signed = x.min() < 0
@@ -130,12 +184,17 @@ class ActivationQuantizer(nn.Module):
         Qp = 2**(self.n_bits-1) - 1 if self.signed else 2**self.n_bits - 1
 
         v, s = x, self.scale
-        v_bar = round_ste(torch.clamp(v / s, Qn, Qp))
+        v_s = v / s
+        self.mask_clamp = (v_s.ge(Qn) * v_s.le(Qp))
+        v_bar = round_ste(torch.clamp(v_s, Qn, Qp))
         v_hat = v_bar * s
+        #print("Difference between before and after: ",torch.norm(x - v_hat))
 
         # use QDrop
         if self.train_mode:
-            return torch.where(torch.rand_like(x) < 0.5, v_hat, x)
+            output = torch.where(torch.rand_like(x) < 0.5, v_hat, x)
+            #print("Difference between before and after 2: ", torch.norm(x - output))
+            return output
         else:
             return v_hat
 
