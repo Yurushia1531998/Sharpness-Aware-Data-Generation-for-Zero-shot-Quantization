@@ -5,7 +5,7 @@ This repository provides the PyTorch implementation of our ICML 2024 paper ["Sha
 ## Getting Started
 ### Installation
 ```bash
-git clone https://github.com/SamsungLabs/SADAG
+git clone https://github.com/Yurushia1531998/Sharpness-Aware-Data-Generation-for-Zero-shot-Quantization
 cd SADAG
 pip3 install -r requirements.txt
 ```
